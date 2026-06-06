@@ -17,7 +17,6 @@ exports.register = async (req, res) => {
     try {
         const { username, password, publicKey, encryptedPrivateKey, keySalt } = req.body;
 
-        // Password strength check
         const errors = validatePassword(password);
         if (errors.length > 0) {
             return res.status(400).json({
@@ -26,7 +25,6 @@ exports.register = async (req, res) => {
             });
         }
 
-        // Duplicate username check
         const { data: existing } = await supabase
             .from('users')
             .select('id')
@@ -116,7 +114,6 @@ exports.login = async (req, res) => {
 
         res.json({
             message: 'Giriş başarılı.',
-            // token artık body'de yok, cookie'de
             encrypted_private_key: user.encrypted_private_key ?? null,
             key_salt:              user.key_salt ?? null,
             user: {
@@ -133,7 +130,31 @@ exports.login = async (req, res) => {
 
 // POST /api/auth/logout
 exports.logout = async (req, res) => {
-    // Cookie'yi sıfırla
     res.clearCookie('token', { path: '/' });
     res.json({ message: 'Çıkış başarılı.' });
+};
+
+// PATCH /api/auth/keys  (protected — update encrypted key material)
+exports.updateKeys = async (req, res) => {
+    try {
+        const { encryptedPrivateKey, keySalt } = req.body;
+
+        if (!encryptedPrivateKey || !keySalt) {
+            return res.status(400).json({ error: 'encryptedPrivateKey ve keySalt zorunludur.' });
+        }
+
+        const { error } = await supabase
+            .from('users')
+            .update({
+                encrypted_private_key: encryptedPrivateKey,
+                key_salt: keySalt,
+            })
+            .eq('id', req.user.id);
+
+        if (error) throw error;
+
+        res.json({ message: 'Anahtar bilgileri güncellendi.' });
+    } catch (error) {
+        res.status(500).json({ error: 'Güncelleme sırasında hata oluştu.', details: error.message });
+    }
 };
